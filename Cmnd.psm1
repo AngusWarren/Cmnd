@@ -255,7 +255,12 @@ function Find-CmndTv {
         do {
             $body.current++
             $results = Invoke-CmndRest -Endpoint "SmartInstall/dev" -Query @{ type = "device" } -Body $body
-            $results.rows
+            $results.rows | ForEach-Object {
+                if ($_.guestName -and $_.guestName -ne 'None') {
+                    $_.guestName = [System.Net.WebUtility]::HtmlDecode($_.guestName)
+                }
+                $_
+            }
         } until ($results.rows.Count -eq 0 -or ($results.current * $results.rowCount) -ge $results.total)
     }
 }
