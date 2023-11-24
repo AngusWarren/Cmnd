@@ -177,7 +177,7 @@ function Connect-Cmnd {
 
 
 function Invoke-CmndRest {
-    [CmdletBinding(DefaultParameterSetName = "Endpoint")]
+    [CmdletBinding(DefaultParameterSetName = "Endpoint", SupportsShouldProcess)]
     param(
         # use a custom endpoint
         [Parameter(Mandatory, ParameterSetName = "Endpoint")]
@@ -219,7 +219,9 @@ function Invoke-CmndRest {
             $Endpoint = "SmartInstall/IPTVServlet"
         }
         $uri = $context.FullUri($Endpoint, $Query)
-        Invoke-RestMethod -WebSession $context.Session -Method $Method -Uri $Uri -Body $body
+        if ($PSCmdlet.ShouldProcess($uri, "$Method $Body")) {
+            Invoke-RestMethod -WebSession $context.Session -Method $Method -Uri $Uri -Body $body
+        }
     }
 }
 
@@ -490,9 +492,6 @@ function Set-CmndTvRoomId {
 }
 
 
-
-
-
 function ConvertTo-CmndTvRoomId {
     <#
         .EXAMPLE
@@ -587,6 +586,7 @@ function SetGuestState {
             Not exposed as a standalone function as the behaviour is odd, and it's
             better wrapped with other functions.
     #>
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory)]
         [String]
@@ -602,17 +602,19 @@ function SetGuestState {
     } else {
         $checkedOut = 'false'
     }
-    $results = Invoke-CmndRest -PMS -Body @{
-        type    = 'switchCheckStatus'
-        id      = $GuestId
-        checkin = $checkedOut # this is the current state, not the desired state.
-    }
-    if ($results.status -ne 'success') {
-        Write-Error (ConvertTo-Json -Compress $results)
-    } elseif ('data' -in $results.PSObject.Properties.Name) {
-        $results.data
-    } else {
-        $results
+    if ($PSCmdlet.ShouldProcess($GuestId, "Applying: $State")) {
+        $results = Invoke-CmndRest -PMS -Body @{
+            type    = 'switchCheckStatus'
+            id      = $GuestId
+            checkin = $checkedOut # this is the current state, not the desired state.
+        }
+        if ($results.status -ne 'success') {
+            Write-Error (ConvertTo-Json -Compress $results)
+        } elseif ('data' -in $results.PSObject.Properties.Name) {
+            $results.data
+        } else {
+            $results
+        }
     }
 }
 
@@ -622,6 +624,7 @@ function New-CmndGuest {
         .SYNOPSIS
             Creates a new guest and checks it in to a room.
     #>
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory)]
         [ValidatePattern('^\d{1,5}$')]
@@ -633,18 +636,20 @@ function New-CmndGuest {
         $GuestName
     )
     process {
-        $results = Invoke-CmndRest -PMS -Body @{
-            type   = 'renameGuestname'
-            id     = 'None'
-            name   = $GuestName
-            roomid = $RoomId
-        }
-        if ($results.status -ne 'success') {
-            Write-Error (ConvertTo-Json -Compress $results)
-        } elseif ('guestId' -notin $results.data.PSObject.Properties.Name) {
-            Write-Error "No guestId found: $( ConvertTo-Json -Compress $results )"
-        } else {
-            SetGuestState -GuestId $results.data.guestId -State CheckedIn
+        if ($PSCmdlet.ShouldProcess($RoomId, "Adding $GuestName to room")) {
+            $results = Invoke-CmndRest -PMS -Body @{
+                type   = 'renameGuestname'
+                id     = 'None'
+                name   = $GuestName
+                roomid = $RoomId
+            }
+            if ($results.status -ne 'success') {
+                Write-Error (ConvertTo-Json -Compress $results)
+            } elseif ('guestId' -notin $results.data.PSObject.Properties.Name) {
+                Write-Error "No guestId found: $( ConvertTo-Json -Compress $results )"
+            } else {
+                SetGuestState -GuestId $results.data.guestId -State CheckedIn
+            }
         }
     }
 }
@@ -655,21 +660,24 @@ function Remove-CmndGuest {
         .SYNOPSIS
             Removes a guest from a room
     #>
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory)]
         [String]
         $GuestId
     )
     process {
-        $out = SetGuestState -GuestId $GuestId -State CheckedOut
-        $properties = $out.PSObject.Properties.Name
-        if ('status' -in $properties) {
-            if ($out.status -ne 'success') {
-                $out
-            }
-        } elseif ('checkin' -in $properties -and $out.checkin -eq 'N') {
-            $null = SetGuestState -GuestId $GuestId -State CheckedIn
+        if ($PSCmdlet.ShouldProcess($GuestId, "Removing guest")) {
             $out = SetGuestState -GuestId $GuestId -State CheckedOut
+            $properties = $out.PSObject.Properties.Name
+            if ('status' -in $properties) {
+                if ($out.status -ne 'success') {
+                    $out
+                }
+            } elseif ('checkin' -in $properties -and $out.checkin -eq 'N') {
+                $null = SetGuestState -GuestId $GuestId -State CheckedIn
+                $out = SetGuestState -GuestId $GuestId -State CheckedOut
+            }
         }
     }
 }
