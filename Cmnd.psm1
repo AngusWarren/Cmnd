@@ -823,6 +823,11 @@ function ConvertTo-M3u {
         .EXAMPLE
             $newestFile = Get-CmndFile -Type ChannelPackageData | Select-Object -Last 1
             $newestFile | Get-CmndFileChannelMap | ConvertTo-M3u
+        .EXAMPLE
+            $httpRoot = "C:\Program Files\Apache Software Foundation\Tomcat 9.0\webapps\ROOT"
+            Get-CmndFileChannelMap -Id 1 | ConvertTo-M3u | Set-Content "$httpRoot\iptv.m3u"
+
+            This will make the file available at http://<cmnd_server>:8080/iptv.m3u
     #>
     param (
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
